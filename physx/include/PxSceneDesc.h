@@ -7,6 +7,7 @@
 #define PX_SCENE_DESC_H
 
 #include "PxSceneQueryDesc.h"
+#include "portable/PxPortableGpuBroadPhaseProvider.h"
 #include "PxPhysXConfig.h"
 #include "foundation/PxFlags.h"
 #include "foundation/PxBounds3.h"
@@ -1010,6 +1011,12 @@ public:
 	*/
 	PxSceneQuerySystem* sceneQuerySystem;
 
+	// Per-scene portable GPU broadphase selection. Null preserves the
+	// upstream CPU/CUDA choices. This never enables GPU dynamics.
+	// The provider must outlive the scene and implement the original
+	// Bp::BroadPhase and Bp::AABBManagerBase host contracts.
+	const PxPortableGpuBroadPhaseProviderV1* portableGpuBroadPhaseProvider;
+
 private:
 	/**
 	\cond
@@ -1107,6 +1114,7 @@ PX_INLINE PxSceneDesc::PxSceneDesc(const PxTolerancesScale& scale):
 	gpuComputeVersion				(0),
 	contactPairSlabSize				(256),
 	sceneQuerySystem				(NULL),
+	portableGpuBroadPhaseProvider	(NULL),
 	tolerancesScale					(scale)
 {
 }
@@ -1118,6 +1126,18 @@ PX_INLINE void PxSceneDesc::setToDefault(const PxTolerancesScale& scale)
 
 PX_INLINE bool PxSceneDesc::isValid() const
 {
+	if(portableGpuBroadPhaseProvider)
+	{
+		const PxPortableGpuBroadPhaseProviderV1& provider = *portableGpuBroadPhaseProvider;
+		if(provider.abi_version != PX_PORTABLE_GPU_BP_PROVIDER_ABI_V1 ||
+			provider.struct_size < sizeof(PxPortableGpuBroadPhaseProviderV1) ||
+			!provider.supports_scene || !provider.create_broadphase ||
+			!provider.create_aabb_manager ||
+			broadPhaseType != PxBroadPhaseType::eGPU ||
+			cudaContextManager != NULL ||
+			(flags & (PxSceneFlag::eENABLE_GPU_DYNAMICS | PxSceneFlag::eENABLE_DIRECT_GPU_API)))
+			return false;
+	}
 	if(!PxSceneQueryDesc::isValid())
 		return false;
 
