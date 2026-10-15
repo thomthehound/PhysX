@@ -357,6 +357,17 @@ PxScene* NpPhysics::createScene(const PxSceneDesc& desc)
 	}
 
 	PX_CHECK_AND_RETURN_NULL(mutableDesc.isValid(), "Physics::createScene: desc.isValid() is false!");
+	// Reject unsupported portable GPU scenes BEFORE constructing the scene.
+	// In particular, never fall back to a CPU broadphase when a portable
+	// provider was explicitly selected. This runs once at scene creation.
+	if(mutableDesc.portableGpuBroadPhaseProvider &&
+		!mutableDesc.portableGpuBroadPhaseProvider->supports_scene(
+			mutableDesc.portableGpuBroadPhaseProvider->user_data, &mutableDesc))
+	{
+		mFoundation.error(PxErrorCode::eINVALID_PARAMETER, PX_FL,
+			"Physics::createScene: portable GPU broadphase provider rejected this scene");
+		return NULL;
+	}
 	const PxTolerancesScale& scale = mPhysics.getTolerancesScale();
 	const PxTolerancesScale& descScale = desc.getTolerancesScale();
 	PX_UNUSED(scale);
