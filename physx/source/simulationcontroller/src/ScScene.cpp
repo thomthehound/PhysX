@@ -5,6 +5,7 @@
 
 #include "ScScene.h"
 #include "BpBroadPhase.h"
+#include "portable/PxPortableGpuBroadPhaseProvider.h"
 #include "ScConstraintCore.h"
 #include "ScArticulationJointCore.h"
 #include "ScArticulationTendonCore.h"
@@ -734,7 +735,10 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 		mNbGeometries[i] = 0;
 
 	bool useGpuDynamics = false;
-	bool useGpuBroadphase = false;
+	// The portable provider is explicitly selected per scene. It never
+	// masquerades as a CUDA context or enables the GPU dynamics pipeline.
+	const bool usePortableGpuBroadphase = desc.portableGpuBroadPhaseProvider != NULL;
+	bool useGpuBroadphase = usePortableGpuBroadphase;
 
 #if PX_SUPPORT_GPU_PHYSX
 	if(desc.flags & PxSceneFlag::eENABLE_GPU_DYNAMICS)
@@ -745,7 +749,7 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 			useGpuDynamics = true;
 	}
 
-	if(desc.broadPhaseType == PxBroadPhaseType::eGPU)
+	if(desc.broadPhaseType == PxBroadPhaseType::eGPU && !usePortableGpuBroadphase)
 	{
 		if(!mCudaContextManager)
 			outputError<PxErrorCode::eDEBUG_WARNING>(__LINE__, "GPU Bp pipeline failed, switching to software");
@@ -773,7 +777,7 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 	VirtualAllocatorCallback* allocator = NULL;
 
 #if PX_SUPPORT_GPU_PHYSX
-	if (useGpuBroadphase || useGpuDynamics)
+	if ((useGpuBroadphase && !usePortableGpuBroadphase) || useGpuDynamics)
 	{
 		PxPhysXGpu* physxGpu = PxvGetPhysXGpu(true);
 
@@ -813,6 +817,16 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 			desc.limits.maxNbStaticShapes, 
 			desc.limits.maxNbDynamicShapes,
 			contextID);
+	}
+else if(usePortableGpuBroadphase)
+	{
+		// This is the ORIGINAL PhysX broadphase factory position. The
+		// provider supplies an implementation of Bp::BroadPhase, not a
+		// parallel SDK simulation loop.
+		const PxPortableGpuBroadPhaseProviderV1* provider =
+			desc.portableGpuBroadPhaseProvider;
+		broadPhase = static_cast<Bp::BroadPhase*>(
+			provider->create_broadphase(provider->user_data, &desc, contextID));
 	}
 #if PX_SUPPORT_GPU_PHYSX
 	else
@@ -874,6 +888,15 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 
 		if (!useGpuBroadphase)
 			mAABBManager = createAABBManagerCPU(desc, broadPhase, mBoundsArray, mContactDistance, *allocator, contextID);
+		else if (usePortableGpuBroadphase)
+		{
+			// Keep AABB manager ownership and found/lost task lifecycle in Sc::Scene.
+			const PxPortableGpuBroadPhaseProviderV1* provider =
+				desc.portableGpuBroadPhaseProvider;
+			mAABBManager = static_cast<Bp::AABBManagerBase*>(
+				provider->create_aabb_manager(provider->user_data, &desc,
+					broadPhase, mBoundsArray, mContactDistance, allocator, contextID));
+		}
 #if PX_SUPPORT_GPU_PHYSX
 		else
 			mAABBManager = createAABBManagerGPU(mGpuWranglerManagers, mLLContext->getCudaContextManager(), *mHeapMemoryAllocationManager, desc, broadPhase, mBoundsArray, mContactDistance, contextID);
