@@ -26,20 +26,22 @@ namespace Sc {
 // The provider is borrowed during scene construction; the broadphase and
 // AABB manager are owned/destroyed by Sc::Scene exactly as in CUDA PhysX.
 // Implementations must not create a second scene, frame driver or CPU ABP.
+// Both factory methods MUST return a valid source-owned object or fail
+// admission, never a null object allowing Sc::Scene to continue half built.
 class PortableGpuBroadPhaseFactory {
 public:
     virtual ~PortableGpuBroadPhaseFactory() {}
 
     // Called after scene-level GPU admission. Returns a source-derived
     // portable GPU broadphase allocated for the owning PhysX scene.
-    virtual Bp::BroadPhase* createBroadPhase(
+    virtual Bp::BroadPhase& createBroadPhase(
         const PxSceneDesc& desc, PxU64 contextID) = 0;
 
     // Called after Sc::Scene allocates its bounds and contact-distance
     // arrays, just as the CUDA factory does. This owner must process
     // original updateBPFirstPass/SecondPass/postBroadPhase tasks and
     // publish found/lost pairs into the scene's normal CPU dynamics path.
-    virtual Bp::AABBManagerBase* createAABBManager(
+    virtual Bp::AABBManagerBase& createAABBManager(
         const PxSceneDesc& desc,
         Bp::BroadPhase& broadphase,
         Bp::BoundsArray& bounds,
