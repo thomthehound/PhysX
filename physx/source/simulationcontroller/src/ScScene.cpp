@@ -807,7 +807,7 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 	// and it is instead the GPU broadphase which is not independent from the GPU AABB manager.......
 	if(portableGpuBroadphase)
 	{
-		broadPhase = desc.portableGpuBroadPhaseFactory->createBroadPhase(desc, contextID);
+		broadPhase = &desc.portableGpuBroadPhaseFactory->createBroadPhase(desc, contextID);
 	}
 	else if(!useGpuBroadphase)
 	{
@@ -883,7 +883,7 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 		mSimulationController = PX_NEW(SimulationController)(mSimulationControllerCallback);
 
 		if (portableGpuBroadphase)
-			mAABBManager = desc.portableGpuBroadPhaseFactory->createAABBManager(
+			mAABBManager = &desc.portableGpuBroadPhaseFactory->createAABBManager(
 				desc, *broadPhase, *mBoundsArray, *mContactDistance, *allocator, contextID);
 		else if (!useGpuBroadphase)
 			mAABBManager = createAABBManagerCPU(desc, broadPhase, mBoundsArray, mContactDistance, *allocator, contextID);
