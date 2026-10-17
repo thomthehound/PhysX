@@ -24,7 +24,6 @@ namespace physx
 	class PxBroadPhaseCallback;
 	class PxCudaContextManager;
 	class PxPostSolveCallback;
-	namespace Sc { class PortableGpuBroadPhaseFactory; }
 
 /**
 \brief Enum for selecting the friction algorithm used for simulation.
@@ -693,15 +692,6 @@ public:
 	PxGpuBroadPhaseDesc*	gpuBroadPhaseDesc;
 
 	/**
-	\brief Source PhysX scene's CUDA-independent portable GPU SAP/AABB factory.
-	The factory is borrowed during scene construction; Sc::Scene retains
-	ownership of the BroadPhase and AABBManagerBase it creates. Non-null
-	requires eGPU, CPU dynamics, and no CUDA context. Without this field,
-	the original PhysX CPU and CUDA selection remains unchanged.
-	*/
-	Sc::PortableGpuBroadPhaseFactory* portableGpuBroadPhaseFactory;
-
-	/**
 	\brief Expected scene limits.
 
 	\see PxSceneLimits PxScene.getLimits()
@@ -1086,7 +1076,6 @@ PX_INLINE PxSceneDesc::PxSceneDesc(const PxTolerancesScale& scale):
 	broadPhaseType					(PxBroadPhaseType::ePABP),
 	broadPhaseCallback				(NULL),
 	gpuBroadPhaseDesc				(NULL),
-	portableGpuBroadPhaseFactory	(NULL),
 
 	frictionType					(PxFrictionType::ePATCH),
 	solverType						(PxSolverType::ePGS),
@@ -1199,13 +1188,6 @@ PX_INLINE bool PxSceneDesc::isValid() const
 	if(gpuBroadPhaseDesc && broadPhaseType != PxBroadPhaseType::eGPU)
 		return false;
 #endif
-
-	if(portableGpuBroadPhaseFactory &&
-	   (broadPhaseType != PxBroadPhaseType::eGPU ||
-	    (flags & PxSceneFlag::eENABLE_GPU_DYNAMICS) ||
-	    (flags & PxSceneFlag::eENABLE_DIRECT_GPU_API) ||
-	    cudaContextManager))
-		return false;
 
 	if(contactPairSlabSize == 0)
 		return false;

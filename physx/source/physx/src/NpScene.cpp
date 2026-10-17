@@ -3117,10 +3117,7 @@ bool NpScene::checkSceneStateAndCudaErrors(bool isCollide /*= false*/)
 bool NpScene::checkGpuErrorsPreSim(bool isCollide /* = false */)
 {
 #if PX_SUPPORT_GPU_PHYSX
-	// GPU broadphase need not mean CUDA. A source-derived portable SAP
-	// runs under the PhysX scene tasks without owning a CUDA context,
-	// and must never be passed to CUDA-only preflight/error checks.
-	if (mCudaContextManager && mScene.isUsingGpuDynamicsOrBp())
+	if (mScene.isUsingGpuDynamicsOrBp())
 	{
 		// AD: order of these 2 matters because we always report an error if we're in the skip state.
 		const bool abortMode = mCudaContextManager->getCudaContext()->isInAbortMode();
