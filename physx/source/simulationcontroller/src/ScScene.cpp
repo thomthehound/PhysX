@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ScScene.h"
+#include "ScPortableGpuBroadPhaseFactory.h"
 #include "BpBroadPhase.h"
 #include "ScConstraintCore.h"
 #include "ScArticulationJointCore.h"
@@ -735,6 +736,9 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 
 	bool useGpuDynamics = false;
 	bool useGpuBroadphase = false;
+	// A portable SAP is a real PhysX GPU broadphase owner, not CUDA
+	// emulation or a request to silently run ABP instead.
+	const bool portableGpuBroadphase = desc.portableGpuBroadPhaseFactory != NULL;
 
 #if PX_SUPPORT_GPU_PHYSX
 	if(desc.flags & PxSceneFlag::eENABLE_GPU_DYNAMICS)
@@ -745,7 +749,7 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 			useGpuDynamics = true;
 	}
 
-	if(desc.broadPhaseType == PxBroadPhaseType::eGPU)
+	if(desc.broadPhaseType == PxBroadPhaseType::eGPU && !portableGpuBroadphase)
 	{
 		if(!mCudaContextManager)
 			outputError<PxErrorCode::eDEBUG_WARNING>(__LINE__, "GPU Bp pipeline failed, switching to software");
@@ -753,6 +757,8 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 			useGpuBroadphase = true;
 	}
 #endif
+	if(portableGpuBroadphase)
+		useGpuBroadphase = true;
 
 	mUseGpuDynamics = useGpuDynamics;
 	mUseGpuBp = useGpuBroadphase;
@@ -773,7 +779,7 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 	VirtualAllocatorCallback* allocator = NULL;
 
 #if PX_SUPPORT_GPU_PHYSX
-	if (useGpuBroadphase || useGpuDynamics)
+	if ((useGpuBroadphase && !portableGpuBroadphase) || useGpuDynamics)
 	{
 		PxPhysXGpu* physxGpu = PxvGetPhysXGpu(true);
 
@@ -799,7 +805,11 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 	//already been passed all bounds in BroadPhase::update() so should use that instead.
 	// PT: above comment is obsolete: MBP now doesn't call getBPBounds anymore (except in commented out code)
 	// and it is instead the GPU broadphase which is not independent from the GPU AABB manager.......
-	if(!useGpuBroadphase)
+	if(portableGpuBroadphase)
+	{
+		broadPhase = &desc.portableGpuBroadPhaseFactory->createBroadPhase(desc, contextID);
+	}
+	else if(!useGpuBroadphase)
 	{
 		PxBroadPhaseType::Enum broadPhaseType = desc.broadPhaseType;
 
@@ -872,7 +882,10 @@ Sc::Scene::Scene(const PxSceneDesc& desc, PxU64 contextID) :
 		mSimulationControllerCallback = PX_NEW(ScSimulationControllerCallback)(this);
 		mSimulationController = PX_NEW(SimulationController)(mSimulationControllerCallback);
 
-		if (!useGpuBroadphase)
+		if (portableGpuBroadphase)
+			mAABBManager = &desc.portableGpuBroadPhaseFactory->createAABBManager(
+				desc, *broadPhase, *mBoundsArray, *mContactDistance, *allocator, contextID);
+		else if (!useGpuBroadphase)
 			mAABBManager = createAABBManagerCPU(desc, broadPhase, mBoundsArray, mContactDistance, *allocator, contextID);
 #if PX_SUPPORT_GPU_PHYSX
 		else
